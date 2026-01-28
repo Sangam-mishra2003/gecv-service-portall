@@ -63,11 +63,23 @@ export async function POST(req: Request) {
       { 
         message: "Login successful", 
         user: {
+            _id: user._id,
             name: user.name,
             email: user.email,
             role: user.role,
             regNo: user.regNo,
-            mobile: user.mobile
+            mobile: user.mobile,
+            // Student profile fields
+            course: user.course,
+            branch: user.branch,
+            session: user.session,
+            semester: user.semester,
+            year: user.year,
+            fatherName: user.fatherName,
+            motherName: user.motherName,
+            dob: user.dob,
+            admissionDate: user.admissionDate,
+            expectedCompletionYear: user.expectedCompletionYear
         },
         token 
       },

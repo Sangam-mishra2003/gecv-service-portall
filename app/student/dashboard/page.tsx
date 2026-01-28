@@ -2,44 +2,70 @@
 
 import { useEffect, useState } from "react";
 import styles from "./StudentDashboard.module.scss";
-import { Bell, LogOut, X, User, Lock } from "lucide-react";
-import Link from "next/link";
+import { Bell, LogOut, X, Lock, Download, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { generateBonafidePDF } from "../../utils/generateBonafidePDF";
 
-// -------- Types --------
+// Types
 interface Student {
-  id: string;
+  _id: string;
   name: string;
   regNo: string;
   course: string;
-  year: string;
-  profileImage: string;
-  email?: string;
-  mobile?: string;
+  branch: string;
+  mobile: string;
+  email: string;
+  fatherName?: string;
+  motherName?: string;
+  dob?: string;
+  session?: string;
+  semester?: number;
+  year?: number;
+  admissionDate?: string;
+  expectedCompletionYear?: string;
 }
 
 interface ServiceRequest {
-  id: string;
-  serviceType:
-    | "Bonafide"
-    | "Fee Structure"
-    | "NOC"
-    | "TC"
-    | "No Dues";
+  _id: string;
+  serviceType: string;
   status: "Pending" | "Approved" | "Rejected";
-  appliedOn: string;
+  purpose: string;
+  rejectionReason?: string;
+  createdAt: string;
+  approvedAt?: string;
+  studentId?: Student;
+}
+
+interface Notification {
+  _id: string;
+  title: string;
+  message: string;
+  type: "approval" | "rejection" | "info";
+  read: boolean;
+  createdAt: string;
+  relatedRequestId?: { serviceType: string; status: string };
 }
 
 export default function StudentDashboard() {
   const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [requestsLoading, setRequestsLoading] = useState(true);
 
-  // 🔹 Modal State
+  // Modal State
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [purpose, setPurpose] = useState("");
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState("");
 
-  // 🔹 Profile/Password State
+  // Notifications Dropdown
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Password Modal State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -48,61 +74,152 @@ export default function StudentDashboard() {
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
 
-  // 🔹 Fetch user from localStorage
+  // Fetch user data
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
       router.push("/login");
       return;
     }
-    
-    const userData = JSON.parse(storedUser);
-    setStudent({
-      id: "STU101",
-      name: userData.name || "Student User",
-      regNo: userData.regNo || "N/A",
-      course: "B.Tech Computer Science",
-      year: "Final Year",
-      profileImage: "/images/student.jpg",
-      email: userData.email,
-      mobile: userData.mobile,
-    });
 
-    setRequests([
-      {
-        id: "REQ1",
-        serviceType: "Bonafide",
-        status: "Pending",
-        appliedOn: "20 Jan 2026",
-      },
-      {
-        id: "REQ2",
-        serviceType: "NOC",
-        status: "Approved",
-        appliedOn: "15 Jan 2026",
-      },
-    ]);
+    const userData = JSON.parse(storedUser);
+    setStudent(userData);
+    setLoading(false);
+
+    // Fetch service requests
+    fetchRequests();
+    // Fetch notifications
+    fetchNotifications();
   }, [router]);
 
-  // 🔹 Send Request Handler
-  const handleSendRequest = () => {
-    if (!selectedService || !purpose.trim()) return;
+  const getToken = () => localStorage.getItem("token");
 
-    const newRequest: ServiceRequest = {
-      id: `REQ${Date.now()}`,
-      serviceType: selectedService as any,
-      status: "Pending",
-      appliedOn: new Date().toLocaleDateString(),
-    };
-
-    setRequests((prev) => [newRequest, ...prev]);
-
-    // Reset
-    setSelectedService(null);
-    setPurpose("");
+  const fetchRequests = async () => {
+    setRequestsLoading(true);
+    try {
+      const res = await fetch("/api/service-requests", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRequests(data.requests || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch requests");
+    } finally {
+      setRequestsLoading(false);
+    }
   };
 
-  // 🔹 Change Password Handler
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications");
+    }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ markAllRead: true }),
+      });
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (err) {
+      console.error("Failed to mark notifications as read");
+    }
+  };
+
+  // Service type mapping for display
+  const serviceLabels: Record<string, string> = {
+    Bonafide: "Bonafide Certificate",
+    FeeStructure: "Fee Structure",
+    TC: "Transfer Certificate",
+    CharacterCertificate: "Character Certificate",
+    NOC: "No Objection Certificate",
+    NoDues: "No Dues Certificate",
+  };
+
+  // Send Request Handler
+  const handleSendRequest = async () => {
+    if (!selectedService || !purpose.trim()) return;
+
+    setSubmitLoading(true);
+    setSubmitError("");
+    setSubmitSuccess("");
+
+    try {
+      const res = await fetch("/api/service-requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          serviceType: selectedService,
+          purpose: purpose.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message);
+      }
+
+      setSubmitSuccess("Request submitted successfully!");
+      fetchRequests();
+      setTimeout(() => {
+        setSelectedService(null);
+        setPurpose("");
+        setSubmitSuccess("");
+      }, 1500);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setSubmitError(error.message || "Failed to submit request");
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  // Download approved document
+  const handleDownload = (request: ServiceRequest) => {
+    if (!student) return;
+
+    // Generate PDF based on service type
+    if (request.serviceType === "Bonafide") {
+      generateBonafidePDF({
+        name: student.name,
+        registrationNo: student.regNo,
+        course: student.course || "B.Tech",
+        branch: student.branch || "",
+        semester: String(student.semester || ""),
+        year: String(student.year || ""),
+        session: student.session || "",
+        dob: student.dob ? new Date(student.dob).toLocaleDateString() : "",
+        fatherName: student.fatherName || "",
+        motherName: student.motherName || "",
+        admissionDate: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString() : "",
+        expectedCompletionYear: student.expectedCompletionYear || "",
+      });
+    }
+    // Add other document types as needed
+  };
+
+  // Change Password Handler
   const handleChangePassword = async () => {
     setPasswordError("");
     setPasswordSuccess("");
@@ -120,17 +237,11 @@ export default function StudentDashboard() {
     setPasswordLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({ currentPassword, newPassword }),
       });
@@ -146,91 +257,154 @@ export default function StudentDashboard() {
       setNewPassword("");
       setConfirmPassword("");
       setTimeout(() => setShowPasswordModal(false), 1500);
-    } catch (err: any) {
-      setPasswordError(err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setPasswordError(error.message);
     } finally {
       setPasswordLoading(false);
     }
   };
 
-  // 🔹 Logout Handler
+  // Logout Handler
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     router.push("/login");
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  if (loading) {
+    return <div className={styles.loading}>Loading...</div>;
+  }
+
   return (
     <div className={styles.dashboard}>
-      {/* ================= TOP BAR (No Global Header) ================= */}
+      {/* TOP BAR */}
       <div className={styles.topBar}>
-  <h2 className={styles.title}>Student Dashboard</h2>
+        <h2 className={styles.title}>Student Dashboard</h2>
 
-  <div className={styles.rightSection}>
-    <div className={styles.notification}>
-      <Bell size={22} />
-      <span className={styles.dot} />
-    </div>
+        <div className={styles.rightSection}>
+          {/* Notifications */}
+          <div className={styles.notificationWrapper}>
+            <button
+              className={styles.notification}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                if (!showNotifications && unreadCount > 0) {
+                  markNotificationsRead();
+                }
+              }}
+            >
+              <Bell size={22} />
+              {unreadCount > 0 && <span className={styles.badge}>{unreadCount}</span>}
+            </button>
 
-    {student && (
-      <div className={styles.profile}>
-        <img src={student.profileImage} alt="Profile" />
-        <div>
-          <p className={styles.name}>{student.name}</p>
-          <button className={styles.logout} onClick={handleLogout}>
-            <LogOut size={16} /> Logout
-          </button>
+            {showNotifications && (
+              <div className={styles.notificationDropdown}>
+                <div className={styles.notificationHeader}>
+                  <h4>Notifications</h4>
+                  <button onClick={() => setShowNotifications(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className={styles.notificationList}>
+                  {notifications.length === 0 ? (
+                    <p className={styles.noNotifications}>No notifications</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n._id}
+                        className={`${styles.notificationItem} ${!n.read ? styles.unread : ""} ${styles[n.type]}`}
+                      >
+                        <div className={styles.notificationIcon}>
+                          {n.type === "approval" ? (
+                            <CheckCircle size={18} />
+                          ) : n.type === "rejection" ? (
+                            <XCircle size={18} />
+                          ) : (
+                            <Bell size={18} />
+                          )}
+                        </div>
+                        <div className={styles.notificationContent}>
+                          <p className={styles.notificationTitle}>{n.title}</p>
+                          <p className={styles.notificationMessage}>{n.message}</p>
+                          <span className={styles.notificationDate}>{formatDate(n.createdAt)}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {student && (
+            <div className={styles.profile}>
+              <div className={styles.avatar}>{student.name.charAt(0).toUpperCase()}</div>
+              <div>
+                <p className={styles.name}>{student.name}</p>
+                <button className={styles.logout} onClick={handleLogout}>
+                  <LogOut size={16} /> Logout
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    )}
-  </div>
-</div>
 
-
-      {/* ================= Student Info ================= */}
+      {/* Student Info */}
       {student && (
         <section className={styles.studentInfo}>
-          <h2>Basic Information</h2>
+          <h2>Profile Information</h2>
           <div className={styles.infoGrid}>
+            <p><strong>Name:</strong> {student.name}</p>
             <p><strong>Registration No:</strong> {student.regNo}</p>
-            <p><strong>Course:</strong> {student.course}</p>
-            <p><strong>Year:</strong> {student.year}</p>
-            {student.email && <p><strong>Email:</strong> {student.email}</p>}
+            <p><strong>Course:</strong> {student.course || "N/A"}</p>
+            <p><strong>Branch:</strong> {student.branch || "N/A"}</p>
+            <p><strong>Session:</strong> {student.session || "N/A"}</p>
+            <p><strong>Semester:</strong> {student.semester || "N/A"}</p>
+            <p><strong>Year:</strong> {student.year || "N/A"}</p>
             {student.mobile && <p><strong>Mobile:</strong> {student.mobile}</p>}
+            {student.email && <p><strong>Email:</strong> {student.email}</p>}
           </div>
-          <button 
-            className={styles.changePasswordBtn}
-            onClick={() => setShowPasswordModal(true)}
-          >
+          <button className={styles.changePasswordBtn} onClick={() => setShowPasswordModal(true)}>
             <Lock size={16} /> Change Password
           </button>
         </section>
       )}
 
-      {/* ================= Services ================= */}
+      {/* Services */}
       <section className={styles.services}>
         <h2>Apply for Services</h2>
         <div className={styles.serviceGrid}>
-          {["Bonafide", "Fee Structure", "NOC", "TC", "No Dues"].map((service) => (
+          {Object.entries(serviceLabels).map(([key, label]) => (
             <button
-              key={service}
+              key={key}
               className={styles.serviceCard}
-              onClick={() => setSelectedService(service)}
+              onClick={() => setSelectedService(key)}
             >
-              {service}
+              {label}
             </button>
           ))}
         </div>
       </section>
+
+      {/* Service Request Modal */}
       {selectedService && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
-              <button  onClick={() => setSelectedService(null)}>
+              <h3>Apply for {serviceLabels[selectedService]}</h3>
+              <button onClick={() => setSelectedService(null)}>
                 <X />
               </button>
-              <h3>Apply for {selectedService}</h3>
-              
             </div>
 
             <label>Purpose *</label>
@@ -240,50 +414,81 @@ export default function StudentDashboard() {
               onChange={(e) => setPurpose(e.target.value)}
             />
 
+            {submitError && <p className={styles.errorMsg}>{submitError}</p>}
+            {submitSuccess && <p className={styles.successMsg}>{submitSuccess}</p>}
+
             <button
               className={styles.sendBtn}
               onClick={handleSendRequest}
+              disabled={submitLoading || !purpose.trim()}
             >
-              Send Request
+              {submitLoading ? "Submitting..." : "Submit Request"}
             </button>
           </div>
         </div>
       )}
 
-      {/* ================= Status ================= */}
+      {/* Request Status */}
       <section className={styles.status}>
         <h2>Request Status</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th>Applied On</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.map((req) => (
-              <tr key={req.id}>
-                <td>{req.serviceType}</td>
-                <td>{req.appliedOn}</td>
-                <td className={styles[req.status.toLowerCase()]}>
-                  {req.status}
-                </td>
+        {requestsLoading ? (
+          <p>Loading requests...</p>
+        ) : requests.length === 0 ? (
+          <p className={styles.noData}>No service requests yet. Apply for a service above.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Purpose</th>
+                <th>Applied On</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {requests.map((req) => (
+                <tr key={req._id}>
+                  <td>{serviceLabels[req.serviceType] || req.serviceType}</td>
+                  <td className={styles.purposeCell}>{req.purpose}</td>
+                  <td>{formatDate(req.createdAt)}</td>
+                  <td>
+                    <span className={`${styles.statusBadge} ${styles[req.status.toLowerCase()]}`}>
+                      {req.status === "Pending" && <Clock size={14} />}
+                      {req.status === "Approved" && <CheckCircle size={14} />}
+                      {req.status === "Rejected" && <XCircle size={14} />}
+                      {req.status}
+                    </span>
+                    {req.status === "Rejected" && req.rejectionReason && (
+                      <p className={styles.rejectionReason}>Reason: {req.rejectionReason}</p>
+                    )}
+                  </td>
+                  <td>
+                    {req.status === "Approved" && (
+                      <button
+                        className={styles.downloadBtn}
+                        onClick={() => handleDownload(req)}
+                      >
+                        <Download size={16} /> Download
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
-      {/* ================= PASSWORD CHANGE MODAL ================= */}
+      {/* Password Change Modal */}
       {showPasswordModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
+              <h3>Change Password</h3>
               <button onClick={() => setShowPasswordModal(false)}>
                 <X />
               </button>
-              <h3>Change Password</h3>
             </div>
 
             <label>Current Password *</label>
@@ -326,4 +531,3 @@ export default function StudentDashboard() {
     </div>
   );
 }
-

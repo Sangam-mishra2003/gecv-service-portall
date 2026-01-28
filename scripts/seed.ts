@@ -15,12 +15,22 @@ async function seed() {
 
     const users = [
       {
-        name: "Student User",
+        name: "SANGAM MISHRA",
         email: "student@gec.ac.in",
         role: "student",
         regNo: "21105152003",
-        password: hashedPassword,
-        mobile: "9876543210"
+        password: await bcrypt.hash("21105152003", 10), // Default password = regNo
+        mobile: "9876543210",
+        course: "B.Tech",
+        branch: "COMPUTER SCIENCE AND ENGINEERING",
+        session: "2024-2025",
+        semester: 6,
+        year: 3,
+        fatherName: "RAJESH MISHRA",
+        motherName: "SUNITA MISHRA",
+        dob: new Date("2003-05-15"),
+        admissionDate: new Date("2021-08-01"),
+        expectedCompletionYear: "2025"
       },
       {
         name: "Faculty User",

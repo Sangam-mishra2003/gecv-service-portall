@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import styles from "./AcademicsDashboard.module.scss";
-import { Bell, LogOut, X, Lock, Users, UserPlus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Bell, LogOut, X, Lock, Users, UserPlus, Trash2, Eye, EyeOff, Check, XCircle, Clock, Download, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { generateBonafidePDF } from "../../utils/generateBonafidePDF";
 
 interface UserInfo {
   name: string;
@@ -21,11 +22,67 @@ interface ManagedUser {
   mobile?: string;
 }
 
+interface Student {
+  _id: string;
+  name: string;
+  regNo: string;
+  email: string;
+  mobile?: string;
+  course?: string;
+  branch?: string;
+  fatherName?: string;
+  motherName?: string;
+  dob?: string;
+  session?: string;
+  semester?: number;
+  year?: number;
+  admissionDate?: string;
+  expectedCompletionYear?: string;
+}
+
+interface ServiceRequest {
+  _id: string;
+  studentId: Student;
+  serviceType: string;
+  status: "Pending" | "Approved" | "Rejected";
+  purpose: string;
+  rejectionReason?: string;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+}
+
+interface Notification {
+  _id: string;
+  title: string;
+  message: string;
+  type: "approval" | "rejection" | "info";
+  read: boolean;
+  createdAt: string;
+}
+
 export default function AcademicsDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // Service Requests State
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestsFilter, setRequestsFilter] = useState<"Pending" | "Approved" | "Rejected">("Pending");
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Approve/Reject Modal State
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   // Password Modal State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -50,7 +107,9 @@ export default function AcademicsDashboard() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<"profile" | "users">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "requests" | "users">("requests");
+
+  const getToken = () => localStorage.getItem("token");
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -59,15 +118,91 @@ export default function AcademicsDashboard() {
       return;
     }
     setUser(JSON.parse(storedUser));
+    fetchNotifications();
   }, [router]);
+
+  useEffect(() => {
+    if (activeTab === "users") {
+      fetchUsers();
+    } else if (activeTab === "requests") {
+      fetchRequests();
+    }
+  }, [activeTab, requestsFilter]);
+
+  // Service type mapping
+  const serviceLabels: Record<string, string> = {
+    Bonafide: "Bonafide Certificate",
+    FeeStructure: "Fee Structure",
+    TC: "Transfer Certificate",
+    CharacterCertificate: "Character Certificate",
+    NOC: "No Objection Certificate",
+    NoDues: "No Dues Certificate",
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Fetch Notifications
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications", {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications");
+    }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ markAllRead: true }),
+      });
+      setUnreadCount(0);
+    } catch (err) {
+      console.error("Failed to mark notifications as read");
+    }
+  };
+
+  // Fetch Service Requests
+  const fetchRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(`/api/service-requests?status=${requestsFilter}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRequests(data.requests || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch requests");
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   // Fetch Users
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/users", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
       if (res.ok) {
@@ -80,11 +215,121 @@ export default function AcademicsDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (activeTab === "users") {
-      fetchUsers();
+  // Approve Request
+  const handleApprove = async () => {
+    if (!selectedRequest) return;
+    setActionLoading(true);
+    setActionError("");
+
+    try {
+      const res = await fetch(`/api/service-requests/${selectedRequest._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ action: "approve" }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message);
+      }
+
+      // Generate and download PDF based on service type
+      const student = selectedRequest.studentId;
+      if (selectedRequest.serviceType === "Bonafide") {
+        generateBonafidePDF({
+          name: student.name,
+          registrationNo: student.regNo,
+          course: student.course || "B.Tech",
+          branch: student.branch || "",
+          semester: String(student.semester || ""),
+          year: String(student.year || ""),
+          session: student.session || "",
+          dob: student.dob ? new Date(student.dob).toLocaleDateString() : "",
+          fatherName: student.fatherName || "",
+          motherName: student.motherName || "",
+          admissionDate: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString() : "",
+          expectedCompletionYear: student.expectedCompletionYear || "",
+        });
+      }
+
+      // Close modal and refresh
+      setSelectedRequest(null);
+      setActionType(null);
+      fetchRequests();
+    } catch (err: unknown) {
+      const error = err as Error;
+      setActionError(error.message || "Failed to approve request");
+    } finally {
+      setActionLoading(false);
     }
-  }, [activeTab]);
+  };
+
+  // Download document for approved request
+  const handleDownloadDocument = (request: ServiceRequest) => {
+    const student = request.studentId;
+    if (!student) return;
+
+    if (request.serviceType === "Bonafide") {
+      generateBonafidePDF({
+        name: student.name,
+        registrationNo: student.regNo,
+        course: student.course || "B.Tech",
+        branch: student.branch || "",
+        semester: String(student.semester || ""),
+        year: String(student.year || ""),
+        session: student.session || "",
+        dob: student.dob ? new Date(student.dob).toLocaleDateString() : "",
+        fatherName: student.fatherName || "",
+        motherName: student.motherName || "",
+        admissionDate: student.admissionDate ? new Date(student.admissionDate).toLocaleDateString() : "",
+        expectedCompletionYear: student.expectedCompletionYear || "",
+      });
+    }
+    // Add other document types as needed
+  };
+
+  // Reject Request
+  const handleReject = async () => {
+    if (!selectedRequest || !rejectionReason.trim()) {
+      setActionError("Please provide a reason for rejection");
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError("");
+
+    try {
+      const res = await fetch(`/api/service-requests/${selectedRequest._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ action: "reject", rejectionReason: rejectionReason.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message);
+      }
+
+      // Close modal and refresh
+      setSelectedRequest(null);
+      setActionType(null);
+      setRejectionReason("");
+      fetchRequests();
+    } catch (err: unknown) {
+      const error = err as Error;
+      setActionError(error.message || "Failed to reject request");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // Create User
   const handleCreateUser = async () => {
@@ -104,12 +349,11 @@ export default function AcademicsDashboard() {
     setCreateLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/users", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
           name: newUserName,
@@ -128,17 +372,16 @@ export default function AcademicsDashboard() {
       }
 
       setCreateSuccess(data.message);
-      // Reset form
       setNewUserName("");
       setNewUserEmail("");
       setNewUserPassword("");
       setNewUserRegNo("");
       setNewUserMobile("");
-      // Refresh list
       fetchUsers();
       setTimeout(() => setShowCreateModal(false), 1500);
-    } catch (err: any) {
-      setCreateError(err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setCreateError(error.message);
     } finally {
       setCreateLoading(false);
     }
@@ -149,10 +392,9 @@ export default function AcademicsDashboard() {
     if (!confirm(`Are you sure you want to delete "${userName}"?`)) return;
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`/api/users?id=${userId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
 
       if (res.ok) {
@@ -181,12 +423,11 @@ export default function AcademicsDashboard() {
     setPasswordLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({ currentPassword, newPassword }),
       });
@@ -202,8 +443,9 @@ export default function AcademicsDashboard() {
       setNewPassword("");
       setConfirmPassword("");
       setTimeout(() => setShowPasswordModal(false), 1500);
-    } catch (err: any) {
-      setPasswordError(err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setPasswordError(error.message);
     } finally {
       setPasswordLoading(false);
     }
@@ -225,10 +467,46 @@ export default function AcademicsDashboard() {
       <div className={styles.topBar}>
         <h2 className={styles.title}>Academics Dashboard</h2>
         <div className={styles.rightSection}>
-          <div className={styles.notification}>
-            <Bell size={22} />
-            <span className={styles.dot} />
+          {/* Notifications */}
+          <div className={styles.notificationWrapper}>
+            <button
+              className={styles.notification}
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                if (!showNotifications && unreadCount > 0) {
+                  markNotificationsRead();
+                }
+              }}
+            >
+              <Bell size={22} />
+              {unreadCount > 0 && <span className={styles.badge}>{unreadCount}</span>}
+            </button>
+
+            {showNotifications && (
+              <div className={styles.notificationDropdown}>
+                <div className={styles.notificationHeader}>
+                  <h4>Notifications</h4>
+                  <button onClick={() => setShowNotifications(false)}>
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className={styles.notificationList}>
+                  {notifications.length === 0 ? (
+                    <p className={styles.noNotifications}>No notifications</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <div key={n._id} className={`${styles.notificationItem} ${!n.read ? styles.unread : ""}`}>
+                        <p className={styles.notificationTitle}>{n.title}</p>
+                        <p className={styles.notificationMessage}>{n.message}</p>
+                        <span className={styles.notificationDate}>{formatDate(n.createdAt)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
           <div className={styles.profile}>
             <div className={styles.avatar}>{user.name.charAt(0).toUpperCase()}</div>
             <div>
@@ -244,10 +522,10 @@ export default function AcademicsDashboard() {
       {/* Tabs */}
       <div className={styles.tabs}>
         <button
-          className={`${styles.tab} ${activeTab === "profile" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("profile")}
+          className={`${styles.tab} ${activeTab === "requests" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("requests")}
         >
-          Profile
+          <FileText size={18} /> Service Requests
         </button>
         <button
           className={`${styles.tab} ${activeTab === "users" ? styles.activeTab : ""}`}
@@ -255,7 +533,103 @@ export default function AcademicsDashboard() {
         >
           <Users size={18} /> Manage Users
         </button>
+        <button
+          className={`${styles.tab} ${activeTab === "profile" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("profile")}
+        >
+          Profile
+        </button>
       </div>
+
+      {/* Service Requests Tab */}
+      {activeTab === "requests" && (
+        <section className={styles.requestsSection}>
+          <div className={styles.requestsHeader}>
+            <h2>Service Requests</h2>
+            <div className={styles.filterTabs}>
+              {(["Pending", "Approved", "Rejected"] as const).map((status) => (
+                <button
+                  key={status}
+                  className={`${styles.filterBtn} ${requestsFilter === status ? styles.activeFilter : ""}`}
+                  onClick={() => setRequestsFilter(status)}
+                >
+                  {status === "Pending" && <Clock size={16} />}
+                  {status === "Approved" && <Check size={16} />}
+                  {status === "Rejected" && <XCircle size={16} />}
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingRequests ? (
+            <p className={styles.loadingText}>Loading requests...</p>
+          ) : requests.length === 0 ? (
+            <p className={styles.noData}>No {requestsFilter.toLowerCase()} requests found.</p>
+          ) : (
+            <table className={styles.requestsTable}>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Reg No</th>
+                  <th>Service</th>
+                  <th>Purpose</th>
+                  <th>Date</th>
+                  {requestsFilter === "Rejected" && <th>Reason</th>}
+                  {requestsFilter === "Pending" && <th>Actions</th>}
+                  {requestsFilter === "Approved" && <th>Download</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((req) => (
+                  <tr key={req._id}>
+                    <td>{req.studentId?.name || "N/A"}</td>
+                    <td>{req.studentId?.regNo || "N/A"}</td>
+                    <td>{serviceLabels[req.serviceType] || req.serviceType}</td>
+                    <td className={styles.purposeCell}>{req.purpose}</td>
+                    <td>{formatDate(req.createdAt)}</td>
+                    {requestsFilter === "Rejected" && (
+                      <td className={styles.rejectionCell}>{req.rejectionReason}</td>
+                    )}
+                    {requestsFilter === "Pending" && (
+                      <td className={styles.actionsCell}>
+                        <button
+                          className={styles.approveBtn}
+                          onClick={() => {
+                            setSelectedRequest(req);
+                            setActionType("approve");
+                          }}
+                        >
+                          <Check size={16} /> Approve
+                        </button>
+                        <button
+                          className={styles.rejectBtn}
+                          onClick={() => {
+                            setSelectedRequest(req);
+                            setActionType("reject");
+                          }}
+                        >
+                          <XCircle size={16} /> Reject
+                        </button>
+                      </td>
+                    )}
+                    {requestsFilter === "Approved" && (
+                      <td>
+                        <button
+                          className={styles.downloadBtn}
+                          onClick={() => handleDownloadDocument(req)}
+                        >
+                          <Download size={16} /> Download
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
 
       {/* Profile Tab */}
       {activeTab === "profile" && (
@@ -322,6 +696,93 @@ export default function AcademicsDashboard() {
             </table>
           )}
         </section>
+      )}
+
+      {/* Approve Modal */}
+      {selectedRequest && actionType === "approve" && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h3>Approve Request</h3>
+              <button onClick={() => { setSelectedRequest(null); setActionType(null); }}>
+                <X />
+              </button>
+            </div>
+
+            <div className={styles.requestDetails}>
+              <p><strong>Student:</strong> {selectedRequest.studentId?.name}</p>
+              <p><strong>Reg No:</strong> {selectedRequest.studentId?.regNo}</p>
+              <p><strong>Service:</strong> {serviceLabels[selectedRequest.serviceType]}</p>
+              <p><strong>Purpose:</strong> {selectedRequest.purpose}</p>
+            </div>
+
+            <p className={styles.confirmText}>
+              Approving this request will generate and download the document. The student will be notified.
+            </p>
+
+            {actionError && <p className={styles.errorMsg}>{actionError}</p>}
+
+            <div className={styles.modalActions}>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => { setSelectedRequest(null); setActionType(null); }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.confirmApproveBtn}
+                onClick={handleApprove}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Processing..." : "Approve & Download"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {selectedRequest && actionType === "reject" && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h3>Reject Request</h3>
+              <button onClick={() => { setSelectedRequest(null); setActionType(null); setRejectionReason(""); }}>
+                <X />
+              </button>
+            </div>
+
+            <div className={styles.requestDetails}>
+              <p><strong>Student:</strong> {selectedRequest.studentId?.name}</p>
+              <p><strong>Service:</strong> {serviceLabels[selectedRequest.serviceType]}</p>
+            </div>
+
+            <label>Reason for Rejection *</label>
+            <textarea
+              placeholder="Enter reason for rejecting this request..."
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+            />
+
+            {actionError && <p className={styles.errorMsg}>{actionError}</p>}
+
+            <div className={styles.modalActions}>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => { setSelectedRequest(null); setActionType(null); setRejectionReason(""); }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.confirmRejectBtn}
+                onClick={handleReject}
+                disabled={actionLoading || !rejectionReason.trim()}
+              >
+                {actionLoading ? "Processing..." : "Reject Request"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create User Modal */}

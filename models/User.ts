@@ -37,6 +37,31 @@ const UserSchema = new Schema(
     },
     mobile: {
         type: String
+    },
+    // Additional student academic fields
+    course: {
+        type: String // e.g., "B.Tech", "M.Tech"
+    },
+    branch: {
+        type: String // e.g., "Computer Science", "Mechanical"
+    },
+    session: {
+        type: String // e.g., "2024-2025"
+    },
+    semester: {
+        type: Number // 1-8
+    },
+    year: {
+        type: Number // 1-4
+    },
+    motherName: {
+        type: String
+    },
+    admissionDate: {
+        type: Date
+    },
+    expectedCompletionYear: {
+        type: String
     }
   },
   { timestamps: true }

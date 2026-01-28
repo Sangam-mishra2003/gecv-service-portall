@@ -1,0 +1,11 @@
+Student Login:
+Registration Number: 21105152003
+Password: password123
+
+Faculty Login:
+Email: faculty@gec.ac.in
+Password: password123
+
+Academics Login:
+Email: academics@gec.ac.in
+Password: password123

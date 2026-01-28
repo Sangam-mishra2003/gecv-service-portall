@@ -17,31 +17,45 @@ export default function LoginModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [regNo, setRegNo] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    const res = await fetch("/api/auth/student-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ regNo, password }),
-    });
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password, role }),
+      });
 
-    if (!res.ok) {
-      setError("Invalid Registration Number or Password");
-      return;
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Invalid Credentials");
+      }
+
+      // 🔐 Store session
+      // For improved security, consider HTTP-only cookies in real production
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
+
+      onClose();
+      // Redirect based on role could be handled here or by middleware
+      if (role === "Student") router.push("/student/dashboard");
+      else if (role === "Faculty") router.push("/faculty/dashboard");
+      else router.push("/academics/dashboard");
+
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
     }
-
-    const data = await res.json();
-
-    // 🔐 Store session (basic demo)
-    localStorage.setItem("student", JSON.stringify(data.student));
-
-    onClose();
-    router.push("/student/dashboard");
   };
 
   return (
@@ -63,7 +77,7 @@ export default function LoginModal({
         >
           <button className={styles.close} onClick={onClose}>✕</button>
 
-          <div className={styles.modalGrid}>
+            <div className={styles.modalGrid}>
             <div className={styles.lottieBox}>
               <Lottie animationData={animationData} loop />
             </div>
@@ -72,12 +86,23 @@ export default function LoginModal({
               <h2 className={styles.title}>{role} Login</h2>
 
               <form className={styles.form} onSubmit={handleLogin}>
-                <input
-                  placeholder="Registration Number"
-                  value={regNo}
-                  onChange={(e) => setRegNo(e.target.value)}
-                  required
-                />
+                {role === "Student" ? (
+                    <input
+                    placeholder="Registration Number"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    required
+                    />
+                ) : (
+                    <input
+                    type="email"
+                    placeholder="Email Address"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    required
+                    />
+                )}
+                
                 <input
                   type="password"
                   placeholder="Password"
@@ -86,19 +111,15 @@ export default function LoginModal({
                   required
                 />
 
-                {error && <p className={styles.error}>{error}</p>}
+                 {error && <p className={styles.error}>{error}</p>}
 
-                <button type="submit">
-                  <Link href="/student/dashboard">Sign In</Link>
+                <button type="submit" disabled={loading} style={{ opacity: loading ? 0.7 : 1 }}>
+                  {loading ? "Signing in..." : "Sign In"}
                 </button>
-
-                 <Link href="/student/dashboard">Sign In</Link>
-                 <Link href="/academic/bonafide">bonafide</Link>
-                 <Link href="/academic/fee-receipt">feeStructure</Link>
               </form>
 
               <p className={styles.hint}>
-                Default Password: <b>student@123</b>
+                {role === 'Student' ? "Default: RegNo: 21105152003, Password: password123" : "Use your registered email (password: password123)"}
               </p>
             </div>
           </div>

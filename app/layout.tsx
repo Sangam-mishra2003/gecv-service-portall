@@ -18,7 +18,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className="bg-gray-50 text-gray-800">
+      <body className="bg-gray-50 text-gray-800" suppressHydrationWarning={true}>
         {!hideLayout && <Header />}
 
         <main className="min-h-screen">

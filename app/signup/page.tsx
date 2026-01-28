@@ -3,13 +3,60 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Lottie from "lottie-react";
-import animationData from "@/public/lottie/login.json";
+import animationData from "../../public/lottie/login.json";
 import styles from "../signup/Signup.module.scss";
+import { useRouter } from "next/navigation";
 
 type Role = "student" | "faculty" | "academics";
 
 export default function SignupPage() {
   const [role, setRole] = useState<Role>("student");
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    mobile: "",
+    dob: "",
+    fatherName: "",
+    regNo: "",
+    rollNo: "",
+    password: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const router = useRouter();
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, role }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Signup failed");
+      }
+
+      setMessage("Registration Successful! Redirecting...");
+      setTimeout(() => {
+        router.push("/login");
+      }, 1500);
+    } catch (error: any) {
+        setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <section className={styles.sinup}>
@@ -49,12 +96,12 @@ export default function SignupPage() {
             </div>
 
             {/* FORM */}
-            <form className={styles.form}>
-              <Field label="Full Name" />
-              <Field label="Email Address" type="email" />
-              <Field label="Mobile Number" type="tel" pattern="[0-9]{10}" />
-              <Field label="Date of Birth" type="date" hasValue />
-              <Field label="Father’s Name" />
+            <form className={styles.form} onSubmit={handleSubmit}>
+              <Field label="Full Name" name="name" value={formData.name} onChange={handleInputChange} />
+              <Field label="Email Address" type="email" name="email" value={formData.email} onChange={handleInputChange} />
+              <Field label="Mobile Number" type="tel" pattern="[0-9]{10}" name="mobile" value={formData.mobile} onChange={handleInputChange} />
+              <Field label="Date of Birth" type="date" hasValue name="dob" value={formData.dob} onChange={handleInputChange} />
+              <Field label="Father’s Name" name="fatherName" value={formData.fatherName} onChange={handleInputChange} />
 
               <AnimatePresence>
                 {role !== "faculty" && role !== "academics" && (
@@ -64,13 +111,15 @@ export default function SignupPage() {
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
                   >
-                    <Field label="Registration Number" />
-                    <Field label="Roll Number" />
+                    <Field label="Registration Number" name="regNo" value={formData.regNo} onChange={handleInputChange} />
+                    <Field label="Roll Number" name="rollNo" value={formData.rollNo} onChange={handleInputChange} />
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <Field label="Password" type="password" minLength={8} />
+              <Field label="Password" type="password" minLength={8} name="password" value={formData.password} onChange={handleInputChange} />
+
+               {message && <p style={{ color: message.includes("Success") ? "green" : "red", fontSize:'0.9rem', marginBottom:'10px' }}>{message}</p>}
 
               <div className={styles.submitWrap}>
                 <motion.button
@@ -78,8 +127,9 @@ export default function SignupPage() {
                   whileTap={{ scale: 0.96 }}
                   className={styles.submit}
                   type="submit"
+                  disabled={loading}
                 >
-                  Create Account
+                  {loading ? "Creating..." : "Create Account"}
                 </motion.button>
               </div>
 

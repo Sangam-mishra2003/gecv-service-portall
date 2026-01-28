@@ -46,7 +46,7 @@ export default function LoginModal({
       localStorage.setItem("token", data.token);
 
       onClose();
-      // Redirect based on role could be handled here or by middleware
+      // Redirect based on role
       if (role === "Student") router.push("/student/dashboard");
       else if (role === "Faculty") router.push("/faculty/dashboard");
       else router.push("/academics/dashboard");

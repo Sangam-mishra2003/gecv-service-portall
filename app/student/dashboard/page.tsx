@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import styles from "./StudentDashboard.module.scss";
-import { Bell, LogOut, X } from "lucide-react";
+import { Bell, LogOut, X, User, Lock } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // -------- Types --------
 interface Student {
@@ -13,6 +14,8 @@ interface Student {
   course: string;
   year: string;
   profileImage: string;
+  email?: string;
+  mobile?: string;
 }
 
 interface ServiceRequest {
@@ -28,6 +31,7 @@ interface ServiceRequest {
 }
 
 export default function StudentDashboard() {
+  const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
 
@@ -35,15 +39,33 @@ export default function StudentDashboard() {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [purpose, setPurpose] = useState("");
 
-  // 🔹 Simulating DB fetch
+  // 🔹 Profile/Password State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // 🔹 Fetch user from localStorage
   useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+      router.push("/login");
+      return;
+    }
+    
+    const userData = JSON.parse(storedUser);
     setStudent({
       id: "STU101",
-      name: "Sangam Kumar Mishra",
-      regNo: "GECV2021CS045",
+      name: userData.name || "Student User",
+      regNo: userData.regNo || "N/A",
       course: "B.Tech Computer Science",
       year: "Final Year",
       profileImage: "/images/student.jpg",
+      email: userData.email,
+      mobile: userData.mobile,
     });
 
     setRequests([
@@ -60,7 +82,7 @@ export default function StudentDashboard() {
         appliedOn: "15 Jan 2026",
       },
     ]);
-  }, []);
+  }, [router]);
 
   // 🔹 Send Request Handler
   const handleSendRequest = () => {
@@ -80,6 +102,64 @@ export default function StudentDashboard() {
     setPurpose("");
   };
 
+  // 🔹 Change Password Handler
+  const handleChangePassword = async () => {
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to change password");
+      }
+
+      setPasswordSuccess("Password changed successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setShowPasswordModal(false), 1500);
+    } catch (err: any) {
+      setPasswordError(err.message);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  // 🔹 Logout Handler
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    router.push("/login");
+  };
+
   return (
     <div className={styles.dashboard}>
       {/* ================= TOP BAR (No Global Header) ================= */}
@@ -97,10 +177,8 @@ export default function StudentDashboard() {
         <img src={student.profileImage} alt="Profile" />
         <div>
           <p className={styles.name}>{student.name}</p>
-          <button className={styles.logout}>
-            <Link href="/login">
-              <LogOut size={16} /> Logout
-            </Link>
+          <button className={styles.logout} onClick={handleLogout}>
+            <LogOut size={16} /> Logout
           </button>
         </div>
       </div>
@@ -117,7 +195,15 @@ export default function StudentDashboard() {
             <p><strong>Registration No:</strong> {student.regNo}</p>
             <p><strong>Course:</strong> {student.course}</p>
             <p><strong>Year:</strong> {student.year}</p>
+            {student.email && <p><strong>Email:</strong> {student.email}</p>}
+            {student.mobile && <p><strong>Mobile:</strong> {student.mobile}</p>}
           </div>
+          <button 
+            className={styles.changePasswordBtn}
+            onClick={() => setShowPasswordModal(true)}
+          >
+            <Lock size={16} /> Change Password
+          </button>
         </section>
       )}
 
@@ -189,8 +275,55 @@ export default function StudentDashboard() {
         </table>
       </section>
 
-      {/* ================= MODAL (Purpose Form) ================= */}
-      
+      {/* ================= PASSWORD CHANGE MODAL ================= */}
+      {showPasswordModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <button onClick={() => setShowPasswordModal(false)}>
+                <X />
+              </button>
+              <h3>Change Password</h3>
+            </div>
+
+            <label>Current Password *</label>
+            <input
+              type="password"
+              placeholder="Enter current password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+
+            <label>New Password *</label>
+            <input
+              type="password"
+              placeholder="Enter new password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+
+            <label>Confirm New Password *</label>
+            <input
+              type="password"
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+
+            {passwordError && <p className={styles.errorMsg}>{passwordError}</p>}
+            {passwordSuccess && <p className={styles.successMsg}>{passwordSuccess}</p>}
+
+            <button
+              className={styles.sendBtn}
+              onClick={handleChangePassword}
+              disabled={passwordLoading}
+            >
+              {passwordLoading ? "Changing..." : "Change Password"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

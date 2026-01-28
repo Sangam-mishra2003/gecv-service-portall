@@ -45,7 +45,19 @@ interface ServiceRequest {
   studentId: Student;
   serviceType: string;
   status: "Pending" | "Approved" | "Rejected";
-  purpose: string;
+  purpose?: string;
+  purposeType?: string;
+  academicYear?: string;
+  reasonForLeaving?: string;
+  lastSemesterCompleted?: number;
+  organizationName?: string;
+  departmentClearances?: {
+    library: boolean;
+    hostel: boolean;
+    lab: boolean;
+    accounts: boolean;
+    sports: boolean;
+  };
   rejectionReason?: string;
   createdAt: string;
   approvedAt?: string;
@@ -713,7 +725,27 @@ export default function AcademicsDashboard() {
               <p><strong>Student:</strong> {selectedRequest.studentId?.name}</p>
               <p><strong>Reg No:</strong> {selectedRequest.studentId?.regNo}</p>
               <p><strong>Service:</strong> {serviceLabels[selectedRequest.serviceType]}</p>
-              <p><strong>Purpose:</strong> {selectedRequest.purpose}</p>
+              
+              {selectedRequest.purposeType && <p><strong>Purpose Type:</strong> {selectedRequest.purposeType}</p>}
+              {selectedRequest.academicYear && <p><strong>Academic Year:</strong> {selectedRequest.academicYear}</p>}
+              {selectedRequest.reasonForLeaving && <p><strong>Reason for Leaving:</strong> {selectedRequest.reasonForLeaving}</p>}
+              {selectedRequest.lastSemesterCompleted && <p><strong>Last Sem Completed:</strong> {selectedRequest.lastSemesterCompleted}</p>}
+              {selectedRequest.organizationName && <p><strong>Organization:</strong> {selectedRequest.organizationName}</p>}
+              
+              {selectedRequest.departmentClearances && (
+                <div>
+                  <strong>Clearances:</strong>
+                  <ul style={{ paddingLeft: '20px', margin: '5px 0' }}>
+                    {Object.entries(selectedRequest.departmentClearances).map(([dept, cleared]) => (
+                      <li key={dept} style={{ color: cleared ? '#16a34a' : '#dc2626' }}>
+                        {dept.charAt(0).toUpperCase() + dept.slice(1)}: {cleared ? "Cleared" : "Pending"}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedRequest.purpose && <p><strong>Details:</strong> {selectedRequest.purpose}</p>}
             </div>
 
             <p className={styles.confirmText}>

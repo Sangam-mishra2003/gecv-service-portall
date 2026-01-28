@@ -58,6 +58,21 @@ export default function StudentDashboard() {
   // Modal State
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [purpose, setPurpose] = useState("");
+  
+  // Service Specific State
+  const [purposeType, setPurposeType] = useState<string>("");
+  const [academicYear, setAcademicYear] = useState<string>("");
+  const [reasonForLeaving, setReasonForLeaving] = useState<string>("");
+  const [lastSemesterCompleted, setLastSemesterCompleted] = useState<string>("");
+  const [organizationName, setOrganizationName] = useState<string>("");
+  const [departmentClearances, setDepartmentClearances] = useState({
+    library: false,
+    hostel: false,
+    lab: false,
+    accounts: false,
+    sports: false,
+  });
+
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
@@ -155,7 +170,15 @@ export default function StudentDashboard() {
 
   // Send Request Handler
   const handleSendRequest = async () => {
-    if (!selectedService || !purpose.trim()) return;
+    // Basic validation
+    if (!selectedService) return;
+    
+    // Service-specific validation
+    if (selectedService === "Bonafide" && !purposeType) { setSubmitError("Please select a purpose type"); return; }
+    if (selectedService === "FeeStructure" && !academicYear) { setSubmitError("Please enter academic year"); return; }
+    if (selectedService === "TC" && (!reasonForLeaving || !lastSemesterCompleted)) { setSubmitError("Please fill all required fields"); return; }
+    if (selectedService === "NOC" && (!purposeType || !organizationName)) { setSubmitError("Please fill all required fields"); return; }
+    if (selectedService === "CharacterCertificate" && !purposeType) { setSubmitError("Please select a purpose type"); return; }
 
     setSubmitLoading(true);
     setSubmitError("");
@@ -171,6 +194,13 @@ export default function StudentDashboard() {
         body: JSON.stringify({
           serviceType: selectedService,
           purpose: purpose.trim(),
+          // Send all fields (server will ignore irrelevant ones)
+          purposeType,
+          academicYear,
+          reasonForLeaving,
+          lastSemesterCompleted: Number(lastSemesterCompleted),
+          organizationName,
+          departmentClearances: selectedService === "NoDues" ? departmentClearances : undefined,
         }),
       });
 
@@ -185,6 +215,18 @@ export default function StudentDashboard() {
       setTimeout(() => {
         setSelectedService(null);
         setPurpose("");
+        setPurposeType("");
+        setAcademicYear("");
+        setReasonForLeaving("");
+        setLastSemesterCompleted("");
+        setOrganizationName("");
+        setDepartmentClearances({
+          library: false,
+          hostel: false,
+          lab: false,
+          accounts: false,
+          sports: false,
+        });
         setSubmitSuccess("");
       }, 1500);
     } catch (err: unknown) {
@@ -407,9 +449,134 @@ export default function StudentDashboard() {
               </button>
             </div>
 
-            <label>Purpose *</label>
+            {/* Dynamic Fields based on Service Type */}
+            
+            {/* Bonafide Certificate */}
+            {selectedService === "Bonafide" && (
+              <>
+                <label>Purpose Type *</label>
+                <select 
+                  value={purposeType} 
+                  onChange={(e) => setPurposeType(e.target.value)}
+                  className={styles.selectInput}
+                >
+                  <option value="">Select Purpose</option>
+                  <option value="Education">Education Loan</option>
+                  <option value="Scholarship">Scholarship</option>
+                  <option value="Internship">Internship</option>
+                  <option value="Other">Other</option>
+                </select>
+              </>
+            )}
+
+            {/* Fee Structure */}
+            {selectedService === "FeeStructure" && (
+              <>
+                <label>Academic Year *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., 2025-2026"
+                  value={academicYear}
+                  onChange={(e) => setAcademicYear(e.target.value)}
+                  className={styles.textInput}
+                />
+              </>
+            )}
+
+            {/* Transfer Certificate */}
+            {selectedService === "TC" && (
+              <>
+                <label>Reason for Leaving *</label>
+                <textarea
+                  placeholder="Reason for applying for TC..."
+                  value={reasonForLeaving}
+                  onChange={(e) => setReasonForLeaving(e.target.value)}
+                />
+                <label>Last Semester Completed *</label>
+                <input
+                  type="number"
+                  placeholder="e.g., 8"
+                  value={lastSemesterCompleted}
+                  onChange={(e) => setLastSemesterCompleted(e.target.value)}
+                  className={styles.textInput}
+                />
+              </>
+            )}
+
+            {/* Character Certificate */}
+            {selectedService === "CharacterCertificate" && (
+              <>
+                <label>Purpose Type *</label>
+                <select 
+                  value={purposeType} 
+                  onChange={(e) => setPurposeType(e.target.value)}
+                  className={styles.selectInput}
+                >
+                  <option value="">Select Purpose</option>
+                  <option value="HigherStudies">Higher Studies</option>
+                  <option value="Job">Job Application</option>
+                  <option value="Other">Other</option>
+                </select>
+              </>
+            )}
+
+            {/* NOC */}
+            {selectedService === "NOC" && (
+              <>
+                <label>Purpose Type *</label>
+                <select 
+                  value={purposeType} 
+                  onChange={(e) => setPurposeType(e.target.value)}
+                  className={styles.selectInput}
+                >
+                  <option value="">Select Purpose</option>
+                  <option value="Internship">Internship</option>
+                  <option value="Event">Event Participation</option>
+                  <option value="Visit">Industrial Visit</option>
+                </select>
+                <label>Organization Name *</label>
+                <input
+                  type="text"
+                  placeholder="Name of organization/company"
+                  value={organizationName}
+                  onChange={(e) => setOrganizationName(e.target.value)}
+                  className={styles.textInput}
+                />
+              </>
+            )}
+
+            {/* No Dues */}
+            {selectedService === "NoDues" && (
+              <>
+                <label>Department Clearances</label>
+                <div className={styles.checkboxGroup}>
+                  {Object.entries(departmentClearances).map(([key, checked]) => (
+                    <label key={key} className={styles.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setDepartmentClearances((prev) => ({
+                            ...prev,
+                            [key]: e.target.checked,
+                          }))
+                        }
+                      />
+                      {key.charAt(0).toUpperCase() + key.slice(1)} Clearance
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Generic Purpose Field (always visible as Description/Remarks) */}
+            <label>
+              {selectedService === "TC" ? "Additional Remarks" : 
+               selectedService === "NoDues" ? "Purpose of No Dues" :
+               "Description / Purpose *"}
+            </label>
             <textarea
-              placeholder="Enter purpose of request..."
+              placeholder="Enter details..."
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
             />
@@ -420,7 +587,7 @@ export default function StudentDashboard() {
             <button
               className={styles.sendBtn}
               onClick={handleSendRequest}
-              disabled={submitLoading || !purpose.trim()}
+              disabled={submitLoading}
             >
               {submitLoading ? "Submitting..." : "Submit Request"}
             </button>

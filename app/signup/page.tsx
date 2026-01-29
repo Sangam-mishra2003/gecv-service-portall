@@ -20,6 +20,10 @@ export default function SignupPage() {
     regNo: "",
     rollNo: "",
     password: "",
+    course: "",
+    branch: "",
+    semester: "",
+    session: "",
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -113,6 +117,12 @@ export default function SignupPage() {
                   >
                     <Field label="Registration Number" name="regNo" value={formData.regNo} onChange={handleInputChange} />
                     <Field label="Roll Number" name="rollNo" value={formData.rollNo} onChange={handleInputChange} />
+                    
+                    <div style={{ marginTop: "1rem", marginBottom: "0.5rem", fontWeight: "bold", color: "#555" }}>Academic Details</div>
+                    <Field label="Course (e.g., B.Tech, BCA)" name="course" value={formData.course} onChange={handleInputChange} />
+                    <Field label="Branch / Department" name="branch" value={formData.branch} onChange={handleInputChange} />
+                    <Field label="Semester" type="number" name="semester" value={formData.semester} onChange={handleInputChange} />
+                    <Field label="Academic Year (e.g., 2021–2025)" name="session" value={formData.session} onChange={handleInputChange} />
                   </motion.div>
                 )}
               </AnimatePresence>

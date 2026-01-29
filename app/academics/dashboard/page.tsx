@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./AcademicsDashboard.module.scss";
-import { Bell, LogOut, X, Lock, Users, UserPlus, Trash2, Eye, EyeOff, Check, XCircle, Clock, Download, FileText } from "lucide-react";
+import { Bell, LogOut, X, Lock, Users, UserPlus, Trash2, Eye, EyeOff, Check, XCircle, Clock, Download, FileText, Edit } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { generateBonafidePDF } from "../../utils/generateBonafidePDF";
 
@@ -20,6 +20,16 @@ interface ManagedUser {
   role: string;
   regNo?: string;
   mobile?: string;
+  course?: string;
+  branch?: string;
+  semester?: number;
+  session?: string;
+  year?: number;
+  fatherName?: string;
+  motherName?: string;
+  dob?: string;
+  admissionDate?: string;
+  expectedCompletionYear?: string;
 }
 
 interface Student {
@@ -83,6 +93,7 @@ export default function AcademicsDashboard() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestsFilter, setRequestsFilter] = useState<"Pending" | "Approved" | "Rejected">("Pending");
+  const [filterService, setFilterService] = useState("");
 
   // Notifications State
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -118,6 +129,14 @@ export default function AcademicsDashboard() {
   const [createLoading, setCreateLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Edit User Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<ManagedUser>>({});
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+
   // Active Tab
   const [activeTab, setActiveTab] = useState<"profile" | "requests" | "users">("requests");
 
@@ -139,7 +158,7 @@ export default function AcademicsDashboard() {
     } else if (activeTab === "requests") {
       fetchRequests();
     }
-  }, [activeTab, requestsFilter]);
+  }, [activeTab, requestsFilter, filterService]);
 
   // Service type mapping
   const serviceLabels: Record<string, string> = {
@@ -195,7 +214,12 @@ export default function AcademicsDashboard() {
   const fetchRequests = async () => {
     setLoadingRequests(true);
     try {
-      const res = await fetch(`/api/service-requests?status=${requestsFilter}`, {
+      let url = `/api/service-requests?status=${requestsFilter}`;
+      if (filterService) {
+        url += `&serviceType=${filterService}`;
+      }
+      
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const data = await res.json();
@@ -399,6 +423,62 @@ export default function AcademicsDashboard() {
     }
   };
 
+  // Update User
+  const handleUpdateUser = async () => {
+    setEditError("");
+    setEditSuccess("");
+    if (!editingUser) return;
+
+    setEditLoading(true);
+
+    try {
+      const res = await fetch(`/api/users`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ ...editFormData, _id: editingUser._id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message);
+      }
+
+      setEditSuccess("User updated successfully");
+      fetchUsers();
+      setTimeout(() => {
+        setShowEditModal(false);
+        setEditingUser(null);
+        setEditSuccess("");
+      }, 1500);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setEditError(error.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleEditClick = (u: ManagedUser) => {
+    setEditingUser(u);
+    setEditFormData({
+        name: u.name,
+        email: u.email,
+        mobile: u.mobile,
+        regNo: u.regNo,
+        course: u.course,
+        branch: u.branch,
+        semester: u.semester,
+        session: u.session,
+        year: u.year,
+        // Add other fields as needed
+    });
+    setShowEditModal(true);
+  };
+
   // Delete User
   const handleDeleteUser = async (userId: string, userName: string) => {
     if (!confirm(`Are you sure you want to delete "${userName}"?`)) return;
@@ -559,6 +639,20 @@ export default function AcademicsDashboard() {
           <div className={styles.requestsHeader}>
             <h2>Service Requests</h2>
             <div className={styles.filterTabs}>
+              {/* Service Type Filter */}
+              <select
+                className={styles.serviceFilter}
+                value={filterService}
+                onChange={(e) => setFilterService(e.target.value)}
+              >
+                <option value="">All Services</option>
+                {Object.entries(serviceLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+
               {(["Pending", "Approved", "Rejected"] as const).map((status) => (
                 <button
                   key={status}
@@ -694,6 +788,13 @@ export default function AcademicsDashboard() {
                       <td className={styles[u.role]}>{u.role}</td>
                       <td>{u.regNo || "-"}</td>
                       <td>
+                        <button
+                          className={styles.editBtn}
+                          style={{ marginRight: '8px', background: '#e0f2fe', color: '#0284c7' }}
+                          onClick={() => handleEditClick(u)}
+                        >
+                          <Edit size={16} />
+                        </button>
                         <button
                           className={styles.deleteBtn}
                           onClick={() => handleDeleteUser(u._id, u.name)}
@@ -897,6 +998,111 @@ export default function AcademicsDashboard() {
               {createLoading ? "Creating..." : "Create User"}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && editingUser && (
+        <div className={styles.modalOverlay}>
+            <div className={styles.modal} style={{ width: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div className={styles.modalHeader}>
+                    <h3>Edit User: {editingUser.name}</h3>
+                    <button onClick={() => setShowEditModal(false)}><X /></button>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                    <label>Full Name</label>
+                    <input 
+                        value={editFormData.name || ""} 
+                        onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                    />
+                    
+                    <label>Email</label>
+                    <input 
+                        value={editFormData.email || ""} 
+                        onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                    />
+
+                    <label>Mobile</label>
+                    <input 
+                        value={editFormData.mobile || ""} 
+                        onChange={(e) => setEditFormData({...editFormData, mobile: e.target.value})}
+                        placeholder="Mobile Number"
+                    />
+
+                    {editingUser.role === 'student' && (
+                        <>
+                            <label>Registration Number</label>
+                            <input 
+                                value={editFormData.regNo || ""} 
+                                onChange={(e) => setEditFormData({...editFormData, regNo: e.target.value})}
+                            />
+                            
+                            <hr style={{ margin: '10px 0', border: '0', borderTop: '1px solid #eee' }} />
+                            <strong style={{ fontSize: '14px', color: '#555' }}>Academic Details</strong>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                    <label>Course</label>
+                                    <input 
+                                        placeholder="e.g. B.Tech"
+                                        value={editFormData.course || ""} 
+                                        onChange={(e) => setEditFormData({...editFormData, course: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label>Branch</label>
+                                    <input 
+                                        placeholder="e.g. CSE"
+                                        value={editFormData.branch || ""} 
+                                        onChange={(e) => setEditFormData({...editFormData, branch: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label>Semester</label>
+                                    <input 
+                                        type="number"
+                                        placeholder="e.g. 1-8"
+                                        value={editFormData.semester || ""} 
+                                        onChange={(e) => setEditFormData({...editFormData, semester: Number(e.target.value)})}
+                                    />
+                                </div>
+                                <div>
+                                    <label>Session (Start-End)</label>
+                                    <input 
+                                        placeholder="e.g. 2021-2025"
+                                        value={editFormData.session || ""} 
+                                        onChange={(e) => setEditFormData({...editFormData, session: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label>Year</label>
+                                    <input 
+                                        type="number"
+                                        placeholder="e.g. 1-4"
+                                        value={editFormData.year || ""} 
+                                        onChange={(e) => setEditFormData({...editFormData, year: Number(e.target.value)})}
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {editError && <p className={styles.errorMsg} style={{ marginTop: '10px' }}>{editError}</p>}
+                {editSuccess && <p className={styles.successMsg} style={{ marginTop: '10px' }}>{editSuccess}</p>}
+
+                <div className={styles.modalActions} style={{ marginTop: '20px' }}>
+                    <button className={styles.cancelBtn} onClick={() => setShowEditModal(false)}>Cancel</button>
+                    <button 
+                        className={styles.submitBtn} 
+                        onClick={handleUpdateUser}
+                        disabled={editLoading}
+                    >
+                        {editLoading ? "Updating..." : "Update User"}
+                    </button>
+                </div>
+            </div>
         </div>
       )}
 

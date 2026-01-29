@@ -9,11 +9,11 @@ export interface BonafideData {
   semester: string;
   year: string;
   session: string;
-  dob: string;
-  fatherName: string;
-  motherName: string;
-  admissionDate: string;
-  expectedCompletionYear: string;
+  dob?: string;
+  fatherName?: string;
+  motherName?: string;
+  admissionDate?: string;
+  expectedCompletionYear?: string;
 }
 
 export const generateBonafidePDF = async (data: BonafideData) => {
@@ -62,20 +62,20 @@ export const generateBonafidePDF = async (data: BonafideData) => {
   doc.setFontSize(13);
 
   doc.text(
-    `This is to certify that Mr./Ms. ${data.name}, bearing Registration `,
+    `This is to certify that Mr./Ms. ${data.name || "__________"}, bearing Registration `,
     35,
     y
   ); y += 8;
 
   doc.text(
-    `No. ${data.registrationNo} is a bonafide student of this institute and is currently studying in`,
+    `No. ${data.registrationNo || "__________"} is a bonafide student of this institute and is currently studying in`,
     35,
     y
   ); y += 8;
 
 
   doc.text(
-     `${data.course} (${data.branch})`+` Semester ${data.semester}, Year ${data.year}`+`during the Academic Session ${data.session}.`,
+     `${data.course || "__________"} (${data.branch || "__________"}) Semester ${data.semester || "___"}, Year ${data.year || "___"} during the Academic Session ${data.session || "__________"}.`,
     35,
     y
   ); y += 20;
@@ -83,12 +83,12 @@ export const generateBonafidePDF = async (data: BonafideData) => {
   doc.text("As per institute records, the details are:", 35, y); 
   y += 10;
 
-  doc.text(`Date of Birth           : ${data.dob}`, 35, y); y += 7;
-  doc.text(`Father's Name          : ${data.fatherName}`, 35, y); y += 7;
-  doc.text(`Mother's Name          : ${data.motherName}`, 35, y); y += 7;
-  doc.text(`Date of Admission      : ${data.admissionDate}`, 35, y); y += 7;
+  doc.text(`Date of Birth           : ${data.dob || "N/A"}`, 35, y); y += 7;
+  doc.text(`Father's Name          : ${data.fatherName || "N/A"}`, 35, y); y += 7;
+  doc.text(`Mother's Name          : ${data.motherName || "N/A"}`, 35, y); y += 7;
+  doc.text(`Date of Admission      : ${data.admissionDate || "N/A"}`, 35, y); y += 7;
   doc.text(
-    `Expected Completion Yr : ${data.expectedCompletionYear}`,
+    `Expected Completion Yr : ${data.expectedCompletionYear || "N/A"}`,
     35,
     y
   );

@@ -65,7 +65,7 @@ const ServiceRequestSchema = new Schema(
     // Service-specific fields
     purposeType: {
       type: String,
-      enum: ["Education", "Scholarship", "Internship", "Employment", "Bank", "Passport", "Other"],
+      enum: ["Education", "Scholarship", "Internship", "Employment", "Bank", "Passport", "HigherStudies", "Job", "Event", "Visit", "Other"],
     },
     academicYear: {
       type: String,

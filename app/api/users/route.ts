@@ -168,3 +168,82 @@ export async function DELETE(req: Request) {
     );
   }
 }
+
+// PATCH - Update user details
+export async function PATCH(req: Request) {
+  const user = await verifyAcademics(req);
+  if (!user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { _id, name, email, mobile, regNo, course, branch, semester, session, year, fatherName, motherName, dob, admissionDate, expectedCompletionYear } = await req.json();
+
+    if (!_id) {
+      return NextResponse.json(
+        { message: "User ID is required" },
+        { status: 400 }
+      );
+    }
+
+    await connectToDatabase();
+
+    // Check if email or regNo is already taken by another user
+    const existingUser = await User.findOne({
+      $and: [
+        { _id: { $ne: _id } },
+        { $or: [{ email }, ...(regNo ? [{ regNo }] : [])] }
+      ]
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { message: "Email or Registration Number already in use by another user" },
+        { status: 400 }
+      );
+    }
+
+    const updateData: any = {
+      name,
+      email,
+      mobile,
+    };
+
+    // Only update academic fields if provided (and maybe check if role is student, but frontend should handle that visibility)
+    if (regNo !== undefined) updateData.regNo = regNo;
+    if (course !== undefined) updateData.course = course;
+    if (branch !== undefined) updateData.branch = branch;
+    if (semester !== undefined) updateData.semester = semester;
+    if (session !== undefined) updateData.session = session;
+    if (year !== undefined) updateData.year = year;
+    if (fatherName !== undefined) updateData.fatherName = fatherName;
+    if (motherName !== undefined) updateData.motherName = motherName;
+    if (dob !== undefined) updateData.dob = dob;
+    if (admissionDate !== undefined) updateData.admissionDate = admissionDate;
+    if (expectedCompletionYear !== undefined) updateData.expectedCompletionYear = expectedCompletionYear;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      _id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        { message: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(
+      { message: "User updated successfully", user: updatedUser },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error("Update user error:", error);
+    return NextResponse.json(
+      { message: "Failed to update user", error: error.message },
+      { status: 500 }
+    );
+  }
+}

@@ -5,13 +5,20 @@ import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, mobile, dob, fatherName, role, regNo, rollNo, password } = await req.json();
+    const { name, email, mobile, dob, fatherName, role, regNo, rollNo, password, course, branch, semester, session } = await req.json();
 
     if (!email || !password || !role) {
       return NextResponse.json(
         { message: "Missing required fields" },
         { status: 400 }
       );
+    }
+    
+    if (role === 'student' && (!course || !branch || !semester || !session)) {
+        return NextResponse.json(
+          { message: "Missing required student fields (Course, Branch, Semester, Academic Year)" },
+          { status: 400 }
+        );
     }
 
     await connectToDatabase();
@@ -49,6 +56,11 @@ export async function POST(req: Request) {
       role,
       regNo,
       rollNo,
+      // Additional student fields
+      course,
+      branch,
+      semester,
+      session,
       password: hashedPassword,
     });
 

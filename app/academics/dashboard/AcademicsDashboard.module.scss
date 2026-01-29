@@ -615,6 +615,22 @@
   }
 }
 
+.serviceFilter {
+  padding: 8px 12px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  font-size: 13px;
+  color: #374151;
+  outline: none;
+  cursor: pointer;
+  min-width: 140px;
+
+  &:focus {
+    border-color: #10b981;
+  }
+}
+
 .requestsTable {
   width: 100%;
   border-collapse: collapse;

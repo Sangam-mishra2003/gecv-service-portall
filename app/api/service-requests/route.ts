@@ -138,8 +138,14 @@ export async function GET(req: Request) {
       query.status = status;
     }
 
+    // Filter by service type if provided
+    const serviceType = searchParams.get("serviceType");
+    if (serviceType) {
+      query.serviceType = serviceType;
+    }
+
     const requests = await ServiceRequest.find(query)
-      .populate("studentId", "name regNo email mobile course branch")
+      .populate("studentId", "name regNo email mobile course branch semester year session dob fatherName motherName admissionDate expectedCompletionYear")
       .populate("approvedBy", "name email")
       .sort({ createdAt: -1 });
 
